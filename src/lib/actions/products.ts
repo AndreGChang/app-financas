@@ -1,17 +1,12 @@
+
 "use server";
 
 import { z } from 'zod';
 import { ProductSchema } from '@/lib/schemas';
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation'; // Though redirect might not be needed for all product actions
-
-// In-memory store for mockProducts (simulate database)
-// This would be replaced by actual database calls (e.g., Prisma, Drizzle)
-let productsStore = [
-  { id: "prod_1", name: "Organic Apples", price: 2.99, cost: 1.50, quantity: 150, createdAt: new Date(), updatedAt: new Date() },
-  { id: "prod_2", name: "Whole Wheat Bread", price: 3.49, cost: 1.20, quantity: 80, createdAt: new Date(), updatedAt: new Date() },
-  { id: "prod_3", name: "Free-Range Eggs (Dozen)", price: 4.99, cost: 2.50, quantity: 60, createdAt: new Date(), updatedAt: new Date() },
-];
+import { query } from '@/lib/db';
+import { randomUUID } from 'crypto'; // For generating IDs
+import type { Product } from '@/types';
 
 
 export async function createProduct(values: z.infer<typeof ProductSchema>) {
@@ -21,18 +16,26 @@ export async function createProduct(values: z.infer<typeof ProductSchema>) {
     return { error: "Invalid fields!", fieldErrors: validatedFields.error.flatten().fieldErrors };
   }
 
-  const newProduct = {
-    ...validatedFields.data,
-    id: `prod_${Date.now()}`, // simple unique ID
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
+  const { name, price, cost, quantity } = validatedFields.data;
+  const newId = `prod_${randomUUID()}`; // Generate a new UUID-based ID
 
-  productsStore.push(newProduct);
-  console.log("Product created:", newProduct);
+  try {
+    const result = await query(
+      'INSERT INTO products (id, name, price, cost, quantity, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) RETURNING id, name, price, cost, quantity, created_at, updated_at',
+      [newId, name, price, cost, quantity]
+    );
+    const newProduct: Product = {
+        ...result.rows[0],
+        price: parseFloat(result.rows[0].price),
+        cost: parseFloat(result.rows[0].cost),
+    };
 
-  revalidatePath('/app/products'); // Revalidate the products page to show the new product
-  return { success: "Product created successfully!", product: newProduct };
+    revalidatePath('/app/products');
+    return { success: "Product created successfully!", product: newProduct };
+  } catch (error) {
+    console.error("Database Error (createProduct):", error);
+    return { error: "Failed to create product in database." };
+  }
 }
 
 export async function updateProduct(id: string, values: z.infer<typeof ProductSchema>) {
@@ -42,33 +45,63 @@ export async function updateProduct(id: string, values: z.infer<typeof ProductSc
     return { error: "Invalid fields!", fieldErrors: validatedFields.error.flatten().fieldErrors };
   }
 
-  const productIndex = productsStore.findIndex(p => p.id === id);
-  if (productIndex === -1) {
-    return { error: "Product not found!" };
+  const { name, price, cost, quantity } = validatedFields.data;
+
+  try {
+    const result = await query(
+      'UPDATE products SET name = $1, price = $2, cost = $3, quantity = $4, updated_at = NOW() WHERE id = $5 RETURNING id, name, price, cost, quantity, created_at, updated_at',
+      [name, price, cost, quantity, id]
+    );
+
+    if (result.rowCount === 0) {
+      return { error: "Product not found!" };
+    }
+    const updatedProduct: Product = {
+        ...result.rows[0],
+        price: parseFloat(result.rows[0].price),
+        cost: parseFloat(result.rows[0].cost),
+    };
+
+    revalidatePath('/app/products');
+    revalidatePath(`/app/dashboard`); // Low stock items might change
+    // If there's a specific product page: revalidatePath(`/app/products/${id}`);
+    return { success: "Product updated successfully!", product: updatedProduct };
+  } catch (error) {
+    console.error("Database Error (updateProduct):", error);
+    return { error: "Failed to update product in database." };
   }
-
-  const updatedProduct = {
-    ...productsStore[productIndex],
-    ...validatedFields.data,
-    updatedAt: new Date(),
-  };
-  productsStore[productIndex] = updatedProduct;
-  console.log("Product updated:", updatedProduct);
-
-  revalidatePath('/app/products');
-  revalidatePath(`/app/products/${id}`); // If there's a specific product page
-  return { success: "Product updated successfully!", product: updatedProduct };
 }
 
 export async function deleteProduct(id: string) {
-  const productIndex = productsStore.findIndex(p => p.id === id);
-  if (productIndex === -1) {
-    return { error: "Product not found!" };
+  try {
+    // Consider foreign key constraints. If sale_items references products,
+    // you might need to handle this (e.g., ON DELETE SET NULL/RESTRICT or archive product).
+    // For now, assuming direct delete is okay or handled by DB schema (e.g., ON DELETE RESTRICT).
+    // If product has sales, deletion might fail if not ON DELETE CASCADE (which is risky for sales history).
+    // A safer approach might be to "soft delete" or archive products.
+    
+    // First, check if there are sales associated with this product.
+    // This is a simplified check. A real app might prevent deletion or offer archiving.
+    const salesCheckResult = await query('SELECT 1 FROM sale_items WHERE product_id = $1 LIMIT 1', [id]);
+    if (salesCheckResult.rowCount > 0) {
+      return { error: "Cannot delete product: It has associated sales records. Consider archiving the product instead." };
+    }
+
+    const result = await query('DELETE FROM products WHERE id = $1', [id]);
+
+    if (result.rowCount === 0) {
+      return { error: "Product not found!" };
+    }
+
+    revalidatePath('/app/products');
+    revalidatePath('/app/dashboard');
+    return { success: "Product deleted successfully!" };
+  } catch (error) {
+    console.error("Database Error (deleteProduct):", error);
+    // Check for specific foreign key violation error if possible
+    if ((error as any).code === '23503') { // PostgreSQL foreign key violation code
+        return { error: "Cannot delete product: It is referenced in existing sales records. Please remove associated sales first or archive the product." };
+    }
+    return { error: "Failed to delete product from database." };
   }
-
-  productsStore.splice(productIndex, 1);
-  console.log("Product deleted, ID:", id);
-
-  revalidatePath('/app/products');
-  return { success: "Product deleted successfully!" };
 }

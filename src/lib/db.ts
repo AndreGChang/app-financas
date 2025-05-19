@@ -55,7 +55,9 @@ export async function query(text: string, params?: any[]) {
     } else {
       // Tenta inicializar o pool se ainda não o fez (cenário de desenvolvimento)
       // Este bloco pode ser redundante se a lógica acima for suficiente
-      (global as any).pgPool = new Pool({ connectionString });
+      if (!(global as any).pgPool) {
+        (global as any).pgPool = new Pool({ connectionString });
+      }
       pool = (global as any).pgPool;
       if (!pool) { // Verificação final
          throw new Error("Falha ao inicializar o pool de banco de dados mesmo após tentativa.");
@@ -74,4 +76,5 @@ export async function query(text: string, params?: any[]) {
   }
 }
 
-export default pool; // Exporta o pool diretamente se preferir gerenciar transações manualmente
+// Exporta o pool para permitir gerenciamento manual de transações quando necessário
+export { pool };

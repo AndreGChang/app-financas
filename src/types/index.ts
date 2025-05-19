@@ -4,25 +4,27 @@ export interface Product {
   price: number;
   cost: number;
   quantity: number;
-  createdAt?: Date;
-  updatedAt?: Date;
+  created_at: Date; // Alterado para Date
+  updated_at: Date; // Alterado para Date
 }
 
 export interface SaleItem {
-  productId: string;
-  productName: string; // Denormalized for easier display
+  id?: string; // Pode ser útil se a tabela sale_items tiver seu próprio PK
+  sale_id?: string; // FK para a venda
+  product_id: string;
+  product_name: string; // Denormalized for easier display
   quantity: number;
-  priceAtSale: number; // Price of the product at the time of sale
-  costAtSale: number; // Cost of the product at the time of sale
+  price_at_sale: number; // Price of the product at the time of sale
+  cost_at_sale: number; // Cost of the product at the time of sale
 }
 
 export interface Sale {
   id: string;
-  items: SaleItem[];
-  totalAmount: number;
-  totalProfit: number;
-  saleDate: Date;
-  cashierId?: string; // Optional: if tracking which employee made the sale
+  items: SaleItem[]; // Deve ser populado a partir da tabela sale_items
+  total_amount: number;
+  total_profit: number;
+  sale_date: Date; // Alterado para Date
+  cashier_id?: string; // Optional: if tracking which employee made the sale
 }
 
 export interface User {
