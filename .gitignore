@@ -1,45 +1,48 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Veja https://help.github.com/articles/ignoring-files/ para mais sobre ignorar arquivos.
 
-# dependencies
+# Dependências
 /node_modules
 /.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+.pnp.js
+yarn.lock
+package-lock.json
 
-# testing
+# Testes
 /coverage
 
-# next.js
+# Next.js
 /.next/
 /out/
 
-# production
+# Produção
 /build
 
-# misc
+# Diversos
 .DS_Store
 *.pem
+*.log
 
-# debug
+# Logs de debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+pnpm-debug.log*
 
-# vercel
+# Arquivos de ambiente local (NÃO FAÇA COMMIT DESTES ARQUIVOS!)
+.env
+.env.local
+.env.*.local
+!/.env.example # Não ignore o arquivo de exemplo
+
+# Vercel
 .vercel
 
-# typescript
+# Turbo
+.turbo
+
+# TypeScript
 *.tsbuildinfo
 next-env.d.ts
 
-.genkit/*
-.env*
-
-# firebase
-firebase-debug.log
-firestore-debug.log
+# Firebase Studio / IDX
+.idx/
