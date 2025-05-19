@@ -1,79 +1,51 @@
 import type { Product, Sale, DashboardMetrics, SaleItem } from "@/types";
-import { query } from './db';
+import { prisma } from './db';
 import { subDays, startOfDay, startOfWeek as dateFnsStartOfWeek } from 'date-fns';
+import { Prisma } from '@prisma/client'; // Import Prisma for raw queries
 
-// --- Funções de busca de dados do Banco de Dados ---
+// --- Funções de busca de dados do Banco de Dados usando Prisma ---
 
 export async function getProducts(): Promise<Product[]> {
   try {
-    const result = await query('SELECT id, name, price, cost, quantity, created_at, updated_at FROM products ORDER BY name ASC');
-    return result.rows.map(row => ({
-      ...row,
-      price: parseFloat(row.price),
-      cost: parseFloat(row.cost),
-    }));
+    const products = await prisma.product.findMany({
+      orderBy: { name: 'asc' },
+    });
+    return products; // Prisma handles type mapping (Float/Decimal to number, DateTime to Date)
   } catch (error) {
-    console.error('Database Error (getProducts):', error);
+    console.error('Prisma Error (getProducts):', error);
     throw new Error('Failed to fetch products.');
   }
 }
 
-export async function getProductById(id: string): Promise<Product | undefined> {
+export async function getProductById(id: string): Promise<Product | null> {
   try {
-    const result = await query('SELECT id, name, price, cost, quantity, created_at, updated_at FROM products WHERE id = $1', [id]);
-    if (result.rows.length === 0) {
-      return undefined;
-    }
-    const row = result.rows[0];
-    return {
-      ...row,
-      price: parseFloat(row.price),
-      cost: parseFloat(row.cost),
-    };
+    const product = await prisma.product.findUnique({
+      where: { id },
+    });
+    return product;
   } catch (error) {
-    console.error('Database Error (getProductById):', error);
+    console.error('Prisma Error (getProductById):', error);
     throw new Error('Failed to fetch product.');
   }
 }
 
 export async function getSales(): Promise<Sale[]> {
   try {
-    const salesResult = await query(`
-      SELECT 
-        s.id, 
-        s.total_amount, 
-        s.total_profit, 
-        s.sale_date, 
-        s.cashier_id,
-        COALESCE(
-          (SELECT json_agg(
-            json_build_object(
-              'id', si.id,
-              'product_id', si.product_id,
-              'product_name', si.product_name,
-              'quantity', si.quantity,
-              'price_at_sale', si.price_at_sale,
-              'cost_at_sale', si.cost_at_sale
-            )
-          ) FROM sale_items si WHERE si.sale_id = s.id),
-          '[]'::json
-        ) as items
-      FROM sales s 
-      ORDER BY s.sale_date DESC
-    `);
-
-    return salesResult.rows.map(row => ({
-      ...row,
-      total_amount: parseFloat(row.total_amount),
-      total_profit: parseFloat(row.total_profit),
-      items: row.items.map((item: any) => ({
-        ...item,
-        price_at_sale: parseFloat(item.price_at_sale),
-        cost_at_sale: parseFloat(item.cost_at_sale),
-      }))
+    const sales = await prisma.sale.findMany({
+      orderBy: { saleDate: 'desc' },
+      include: {
+        items: true, // Include related SaleItems
+      },
+    });
+    // Map SaleItem structure if needed, Prisma usually handles it well.
+    // The types/index.ts Sale.items should match Prisma's SaleItem[]
+    return sales.map(sale => ({
+        ...sale,
+        cashierId: sale.cashierId ?? undefined, // Ensure optional fields are handled
+        items: sale.items.map(item => ({...item})) // Ensure items are correctly mapped if any transformation is needed
     }));
   } catch (error) {
-    console.error('Database Error (getSales):', error);
+    console.error('Prisma Error (getSales):', error);
     throw new Error('Failed to fetch sales.');
   }
 }
@@ -85,24 +57,39 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     const sod = startOfDay(today);
     const sow = dateFnsStartOfWeek(today, { weekStartsOn: 0 }); // Sunday as start of week
 
-    const totalCashResult = await query('SELECT SUM(total_amount) as total FROM sales');
-    const totalCash = parseFloat(totalCashResult.rows[0]?.total) || 0;
+    const totalCashResult = await prisma.sale.aggregate({
+      _sum: { totalAmount: true },
+    });
+    const totalCash = totalCashResult._sum.totalAmount || 0;
 
-    const stockValueResult = await query('SELECT SUM(cost * quantity) as total FROM products');
-    const currentStockValue = parseFloat(stockValueResult.rows[0]?.total) || 0;
+    // For SUM(cost * quantity), Prisma doesn't directly support this in `aggregate`.
+    // Option 1: Fetch all and calculate (less performant for large datasets)
+    // const allProducts = await prisma.product.findMany();
+    // const currentStockValue = allProducts.reduce((sum, p) => sum + (p.cost * p.quantity), 0);
 
-    const dailyProfitResult = await query('SELECT SUM(total_profit) as total FROM sales WHERE sale_date >= $1', [sod]);
-    const dailyProfit = parseFloat(dailyProfitResult.rows[0]?.total) || 0;
+    // Option 2: Use $queryRaw for complex aggregates (more performant)
+    const stockValueRawResult = await prisma.$queryRaw<[{ total: number | null }]>`
+      SELECT SUM(cost * quantity) as total FROM products
+    `;
+    const currentStockValue = stockValueRawResult[0]?.total ?? 0;
 
-    const weeklyProfitResult = await query('SELECT SUM(total_profit) as total FROM sales WHERE sale_date >= $1', [sow]);
-    const weeklyProfit = parseFloat(weeklyProfitResult.rows[0]?.total) || 0;
+
+    const dailyProfitResult = await prisma.sale.aggregate({
+      _sum: { totalProfit: true },
+      where: { saleDate: { gte: sod } },
+    });
+    const dailyProfit = dailyProfitResult._sum.totalProfit || 0;
+
+    const weeklyProfitResult = await prisma.sale.aggregate({
+      _sum: { totalProfit: true },
+      where: { saleDate: { gte: sow } },
+    });
+    const weeklyProfit = weeklyProfitResult._sum.totalProfit || 0;
     
-    const lowStockItemsResult = await query('SELECT id, name, price, cost, quantity, created_at, updated_at FROM products WHERE quantity < 50 ORDER BY quantity ASC');
-    const lowStockItems: Product[] = lowStockItemsResult.rows.map(row => ({
-        ...row,
-        price: parseFloat(row.price),
-        cost: parseFloat(row.cost),
-    }));
+    const lowStockItems = await prisma.product.findMany({
+      where: { quantity: { lt: 50 } },
+      orderBy: { quantity: 'asc' },
+    });
 
     return {
       totalCash,
@@ -112,7 +99,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       lowStockItems,
     };
   } catch (error) {
-    console.error('Database Error (getDashboardMetrics):', error);
+    console.error('Prisma Error (getDashboardMetrics):', error);
     throw new Error('Failed to fetch dashboard metrics.');
   }
 }

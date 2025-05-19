@@ -1,0 +1,52 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id        String   @id @default(uuid())
+  name      String
+  price     Float    // Using Float for NUMERIC. For high precision, consider Decimal.
+  cost      Float
+  quantity  Int
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  saleItems SaleItem[] // Relation to SaleItem
+
+  @@map("products")
+}
+
+model Sale {
+  id          String   @id @default(uuid())
+  totalAmount Float    @map("total_amount")
+  totalProfit Float    @map("total_profit")
+  saleDate    DateTime @default(now()) @map("sale_date")
+  cashierId   String?  @map("cashier_id") // Optional: if tracking which employee made the sale
+
+  items SaleItem[] // Relation to SaleItem
+
+  @@map("sales")
+}
+
+model SaleItem {
+  id            String @id @default(uuid()) // Changed to String and uuid for consistency
+  saleId        String @map("sale_id")
+  productId     String @map("product_id")
+  productName   String @map("product_name") // Denormalized for easier display
+  quantity      Int
+  priceAtSale   Float  @map("price_at_sale")
+  costAtSale    Float  @map("cost_at_sale")
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@map("sale_items")
+}
