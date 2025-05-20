@@ -9,6 +9,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import type { Metadata } from 'next';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Dashboard - MarketEase',
   description: 'Overview of your market performance.',

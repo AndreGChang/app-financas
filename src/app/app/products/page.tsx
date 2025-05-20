@@ -3,14 +3,14 @@ import { ProductsClient } from "@/components/products/ProductsClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Metadata } from 'next';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Products - MarketEase',
   description: 'Manage your product inventory.',
 };
 
-// Ensure this page is dynamically rendered if data changes frequently
-// export const revalidate = 0; // or a reasonable time like 60 seconds
-// Or use `fetch` with cache options in `getProducts`
+// export const revalidate = 0; // This is another way to achieve dynamic rendering
 
 export default async function ProductsPage() {
   const products = await getProducts();
