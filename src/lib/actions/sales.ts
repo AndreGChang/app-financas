@@ -4,13 +4,20 @@
 import { z } from 'zod';
 import { SaleSchema } from '@/lib/schemas';
 import { revalidatePath } from 'next/cache';
-import { prisma } from '@/lib/db'; // Use Prisma client
-import type { Product, Sale, SaleItem } from '@/types'; // Assuming types are compatible
+import { prisma } from '@/lib/db';
+import type { Sale } from '@/types';
+import { logAuditEvent } from '@/lib/audit';
+// Import getSimulatedCurrentUser para obter o ID do usuário para auditoria
+// Em um app real, isso viria de um sistema de sessão/auth.
+import { getSimulatedCurrentUser } from './auth';
+
 
 export async function recordSale(values: z.infer<typeof SaleSchema>) {
   const validatedFields = SaleSchema.safeParse(values);
+  const currentUser = await getSimulatedCurrentUser(); // Obter usuário para auditoria
 
   if (!validatedFields.success) {
+    await logAuditEvent("SALE_RECORD_FAILED", { userId: currentUser?.id, details: { error: "Invalid sale data", values } });
     return { error: "Invalid sale data!", fieldErrors: validatedFields.error.flatten().fieldErrors };
   }
 
@@ -20,7 +27,7 @@ export async function recordSale(values: z.infer<typeof SaleSchema>) {
     const newSale = await prisma.$transaction(async (tx) => {
       let totalAmount = 0;
       let totalProfit = 0;
-      const saleItemsData: Omit<SaleItem, 'id' | 'saleId'>[] = []; // Prisma will generate IDs
+      const saleItemsDataForAudit = [];
 
       for (const item of items) {
         const product = await tx.product.findUnique({
@@ -35,7 +42,6 @@ export async function recordSale(values: z.infer<typeof SaleSchema>) {
           throw new Error(`Not enough stock for ${product.name}. Available: ${product.quantity}, Requested: ${item.quantity}.`);
         }
 
-        // Update product quantity
         await tx.product.update({
           where: { id: product.id },
           data: { quantity: { decrement: item.quantity } },
@@ -47,34 +53,50 @@ export async function recordSale(values: z.infer<typeof SaleSchema>) {
         totalAmount += itemAmount;
         totalProfit += itemProfit;
 
-        saleItemsData.push({
+        saleItemsDataForAudit.push({
           productId: product.id,
-          productName: product.name, // Denormalized
+          productName: product.name,
           quantity: item.quantity,
           priceAtSale: product.price,
-          costAtSale: product.cost,
         });
       }
 
-      // Create the sale and link sale items
       const createdSale = await tx.sale.create({
         data: {
           totalAmount,
           totalProfit,
-          // saleDate is @default(now()) in Prisma schema
+          cashierId: currentUser?.id, // Associar venda ao usuário logado (simulado)
           items: {
-            create: saleItemsData.map(si => ({
-              productId: si.productId,
-              productName: si.productName,
-              quantity: si.quantity,
-              priceAtSale: si.priceAtSale,
-              costAtSale: si.costAtSale,
-            })),
+            create: items.map(item => {
+              const productDetails = saleItemsDataForAudit.find(p => p.productId === item.productId)!;
+              return {
+                productId: item.productId,
+                productName: productDetails.productName, 
+                quantity: item.quantity,
+                priceAtSale: productDetails.priceAtSale,
+                // Custo precisa ser buscado do produto original para o cálculo do lucro no item
+                costAtSale: (async () => {
+                    const originalProduct = await prisma.product.findUnique({where: {id: item.productId}});
+                    return originalProduct?.cost || 0;
+                })(),
+              };
+            }),
           },
         },
         include: {
-          items: true, // Include the created items in the response
+          items: true,
         },
+      });
+      
+      // Log de auditoria após a transação ser bem-sucedida
+      await logAuditEvent("SALE_RECORDED", { 
+        userId: currentUser?.id, 
+        details: { 
+          saleId: createdSale.id, 
+          totalAmount: createdSale.totalAmount,
+          itemCount: items.length,
+          items: saleItemsDataForAudit 
+        } 
       });
 
       return createdSale;
@@ -82,18 +104,21 @@ export async function recordSale(values: z.infer<typeof SaleSchema>) {
 
     revalidatePath('/app/sales');
     revalidatePath('/app/dashboard');
-    revalidatePath('/app/products'); // Stock levels changed
+    revalidatePath('/app/products');
     
-    // Adapt the returned 'newSale' to the 'Sale' type if necessary.
-    // Prisma's returned object should be largely compatible if types/index.ts is aligned.
     return { success: "Sale recorded successfully!", sale: newSale as unknown as Sale };
 
   } catch (error: any) {
     console.error("Prisma Transaction Error (recordSale):", error);
+    const errorDetails = { 
+        error: error.message || "Database operation failed.", 
+        inputValues: items 
+    };
+    await logAuditEvent("SALE_RECORD_EXCEPTION", { userId: currentUser?.id, details: errorDetails });
+    
     if (error.message.includes("Not enough stock") || error.message.includes("not found")) {
         return { error: error.message };
     }
-    // Check for specific Prisma error codes if needed, e.g., transaction conflict
     return { error: `Failed to record sale: ${error.message || "Database operation failed."}` };
   }
 }

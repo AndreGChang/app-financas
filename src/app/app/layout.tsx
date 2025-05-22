@@ -1,3 +1,4 @@
+
 import type React from "react";
 import Link from "next/link";
 import {
@@ -14,20 +15,33 @@ import {
 } from "@/components/ui/sidebar";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
-import { Home, Package, ShoppingCart, BarChart3, LogOut, Store, Settings } from "lucide-react";
-import { logout } from "@/lib/actions/auth";
+import { Home, Package, ShoppingCart, BarChart3, LogOut, Store, Settings, ShieldCheck, Activity } from "lucide-react";
+import { logout, getSimulatedCurrentUser } from "@/lib/actions/auth"; // Importar função para pegar usuário
+import type { User, Role } from "@/types";
 
-const navItems = [
+const navItemsBase = [
   { href: "/app/dashboard", label: "Dashboard", icon: Home },
   { href: "/app/products", label: "Products", icon: Package },
   { href: "/app/sales", label: "Sales", icon: ShoppingCart },
-  // { href: "/app/reports", label: "Reports", icon: BarChart3 }, // Example for future
-  // { href: "/app/settings", label: "Settings", icon: Settings }, // Example for future
 ];
 
-export default function AppLayout({ children, }: { children: React.ReactNode; }) {
-  // This state would typically come from a session/auth context
-  const pageTitle = "MarketEase"; // Placeholder, should be dynamic
+const adminNavItems = [
+  { href: "/app/admin/audit-logs", label: "Audit Logs", icon: Activity, roles: ["ADMIN"] as Role[] }, // Exemplo de painel admin
+  // Adicionar mais links de admin aqui
+];
+
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const pageTitle = "MarketEase"; // Placeholder, deveria ser dinâmico
+
+  // Simular obtenção do usuário atual e sua role
+  // Em um aplicativo real, isso viria de uma sessão/contexto de autenticação
+  const currentUser = await getSimulatedCurrentUser();
+  const userRole = currentUser?.role || "USER";
+
+  const navItems = [
+    ...navItemsBase,
+    ...adminNavItems.filter(item => item.roles.includes(userRole)),
+  ];
 
   return (
     <SidebarProvider defaultOpen>
@@ -57,6 +71,20 @@ export default function AppLayout({ children, }: { children: React.ReactNode; })
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
+             {/* Link de Admin Panel Condicional (Exemplo mais direto) */}
+             {userRole === 'ADMIN' && (
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  tooltip={{ children: "Admin Settings", className: "group-data-[collapsible=icon]:block hidden" }}
+                >
+                  <Link href="/app/admin/settings">
+                    <ShieldCheck />
+                    <span>Admin Settings</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter className="p-2">
@@ -73,7 +101,7 @@ export default function AppLayout({ children, }: { children: React.ReactNode; })
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <AppHeader pageTitle={pageTitle} /> {/* pageTitle needs to be dynamic based on route */}
+        <AppHeader pageTitle={pageTitle} />
         <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-auto">
           {children}
         </main>

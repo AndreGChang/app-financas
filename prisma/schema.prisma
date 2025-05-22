@@ -1,52 +1,79 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-generator client {
-  provider = "prisma-client-js"
-}
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  password  String   // Em um app real, isso seria um hash
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditLogs AuditLog[] // Relação com AuditLog
+}
+
 model Product {
   id        String   @id @default(uuid())
   name      String
-  price     Float    // Using Float for NUMERIC. For high precision, consider Decimal.
+  price     Float
   cost      Float
   quantity  Int
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  saleItems SaleItem[] // Relation to SaleItem
-
-  @@map("products")
+  saleItems SaleItem[] // Relação com SaleItem
 }
 
 model Sale {
-  id          String   @id @default(uuid())
-  totalAmount Float    @map("total_amount")
-  totalProfit Float    @map("total_profit")
-  saleDate    DateTime @default(now()) @map("sale_date")
-  cashierId   String?  @map("cashier_id") // Optional: if tracking which employee made the sale
-
-  items SaleItem[] // Relation to SaleItem
-
-  @@map("sales")
+  id          String     @id @default(uuid())
+  totalAmount Float
+  totalProfit Float
+  saleDate    DateTime   @default(now())
+  cashierId   String? // Pode ser uma FK para User no futuro
+  items       SaleItem[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 }
 
 model SaleItem {
-  id            String @id @default(uuid()) // Changed to String and uuid for consistency
-  saleId        String @map("sale_id")
-  productId     String @map("product_id")
-  productName   String @map("product_name") // Denormalized for easier display
-  quantity      Int
-  priceAtSale   Float  @map("price_at_sale")
-  costAtSale    Float  @map("cost_at_sale")
+  id           String  @id @default(uuid())
+  saleId       String
+  sale         Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productName  String // Denormalized
+  quantity     Int
+  priceAtSale  Float
+  costAtSale   Float
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  @@index([saleId])
+  @@index([productId])
+}
 
-  @@map("sale_items")
+model AuditLog {
+  id        String    @id @default(uuid())
+  action    String    // Ex: "CREATE_PRODUCT", "LOGIN_SUCCESS"
+  userId    String?   // ID do usuário que realizou a ação
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  details   Json?     // Detalhes adicionais da ação em formato JSON
+  ipAddress String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([action])
 }

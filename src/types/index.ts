@@ -1,44 +1,58 @@
-export interface Product {
-  id: string; // Handled by Prisma (uuid)
-  name: string;
-  price: number; // Prisma Float maps to number
-  cost: number;  // Prisma Float maps to number
-  quantity: number;
-  createdAt: Date; // Prisma DateTime maps to Date
-  updatedAt: Date; // Prisma DateTime maps to Date
-}
-
-export interface SaleItem {
-  id: string; // Handled by Prisma (uuid)
-  saleId: string; // FK to the sale
-  productId: string;
-  productName: string; // Denormalized for easier display
-  quantity: number;
-  priceAtSale: number; // Price of the product at the time of sale
-  costAtSale: number; // Cost of the product at the time of sale
-}
-
-export interface Sale {
-  id: string; // Handled by Prisma (uuid)
-  items: SaleItem[]; // Relation to SaleItem model
-  totalAmount: number;
-  totalProfit: number;
-  saleDate: Date; // Prisma DateTime maps to Date
-  cashierId?: string | null; // Optional: if tracking which employee made the sale
-}
+export type Role = "USER" | "ADMIN";
 
 export interface User {
   id: string;
   email: string;
   name?: string | null;
-  // role: 'admin' | 'employee'; // Example roles - define in Prisma schema if needed
+  role: Role;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-// For dashboard metrics
+export interface Product {
+  id: string;
+  name: string;
+  price: number;
+  cost: number;
+  quantity: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SaleItem {
+  id: string;
+  saleId: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  priceAtSale: number;
+  costAtSale: number;
+}
+
+export interface Sale {
+  id: string;
+  items: SaleItem[];
+  totalAmount: number;
+  totalProfit: number;
+  saleDate: Date;
+  cashierId?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface DashboardMetrics {
   totalCash: number;
-  currentStockValue: number; // Based on cost price
+  currentStockValue: number;
   dailyProfit: number;
   weeklyProfit: number;
   lowStockItems: Product[];
+}
+
+export interface AuditLogEntry {
+  id: string;
+  action: string;
+  userId?: string | null;
+  details?: any | null; // Prisma usa Json, que pode ser qualquer tipo serializável
+  ipAddress?: string | null;
+  createdAt: Date;
 }
