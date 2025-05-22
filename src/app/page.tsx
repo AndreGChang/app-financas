@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Store, LogIn, UserPlus } from "lucide-react";
@@ -35,12 +36,8 @@ export default function HomePage() {
             </Button>
           </div>
         </CardContent>
-        <CardFooter className="flex justify-center">
-           <Button asChild variant="ghost" className="text-sm text-primary hover:underline">
-             <Link href="/app/dashboard">
-                Access App (Demo)
-             </Link>
-           </Button>
+        <CardFooter className="flex justify-center pt-4">
+           {/* O botão "Access App (Demo)" foi removido conforme solicitado. */}
         </CardFooter>
       </Card>
       <footer className="mt-8 text-center text-muted-foreground text-sm">
