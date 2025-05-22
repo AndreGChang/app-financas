@@ -1,6 +1,8 @@
 import { SignupForm } from "@/components/auth/SignupForm";
 import type { Metadata } from 'next';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Sign Up - MarketEase',
   description: 'Create your MarketEase account.',

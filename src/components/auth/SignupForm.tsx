@@ -32,35 +32,45 @@ export function SignupForm() {
     },
   });
 
-  const onSubmit = (values: z.infer<typeof SignupSchema>) => {
+const onSubmit = (values: z.infer<typeof SignupSchema>) => {
     setError("");
     startTransition(async () => {
-       try {
-        const result = await signup(values);
-        if (result?.error) {
-          setError(result.error);
-          toast({
-            variant: "destructive",
-            title: "Signup Failed",
-            description: result.error,
-          });
-        } else if (result?.success) {
-           toast({
-            title: "Signup Successful",
-            description: result.success,
-          });
-          // Redirect is handled by server action if successful, or user is prompted to login
+        try {
+            const result = await signup(values);
+            
+            // Definir tipo explícito para o resultado
+            type SignupResult = { 
+                error?: string; 
+                success?: string;
+                // Adicione outros campos se necessário
+            };
+            
+            const typedResult = result as SignupResult;
+
+            if (typedResult?.error) {
+                setError(typedResult.error);
+                toast({
+                    variant: "destructive",
+                    title: "Signup Failed",
+                    description: typedResult.error,
+                });
+            } else if (typedResult?.success) {
+                toast({
+                    title: "Signup Successful",
+                    description: typedResult.success,
+                });
+                // Redirecionamento tratado pelo servidor se bem-sucedido
+            }
+        } catch (err) {
+            setError("An unexpected error occurred.");
+            toast({
+                variant: "destructive",
+                title: "Signup Error",
+                description: "An unexpected error occurred. Please try again.",
+            });
         }
-      } catch (err) {
-        setError("An unexpected error occurred.");
-        toast({
-          variant: "destructive",
-          title: "Signup Error",
-          description: "An unexpected error occurred. Please try again.",
-        });
-      }
     });
-  };
+};
 
   return (
     <Card className="w-full max-w-md shadow-xl">
