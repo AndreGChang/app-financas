@@ -6,14 +6,19 @@ import { LoginSchema, SignupSchema } from '@/lib/schemas';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { logAuditEvent } from '@/lib/audit';
-// Em um app real, você usaria uma biblioteca para hashing de senhas como bcrypt
-// import bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
+import type { User, Role } from "@/types";
+
 
 // Esta é uma simulação. Em um app real, você gerenciaria sessões/cookies.
 // Para esta demonstração, vamos simular que o usuário logado é "admin@marketease.com" para RBAC.
 // E que uma sessão é estabelecida de alguma forma.
-
 const SIMULATED_SESSION_USER_EMAIL_FOR_RBAC = "admin@marketease.com"; // Para simular admin
+
+// Simulação: Armazena o email do usuário "logado" para fins de simulação de sessão e RBAC.
+// Em um app real, isso seria gerenciado por cookies/tokens de sessão.
+let simulatedLoggedInUserEmail: string | null = null;
+
 
 export async function login(values: z.infer<typeof LoginSchema>) {
   const validatedFields = LoginSchema.safeParse(values);
@@ -35,27 +40,20 @@ export async function login(values: z.infer<typeof LoginSchema>) {
       return { error: "Invalid email or password." };
     }
 
-    // Em um app real, compare a senha com hash:
-    // const passwordsMatch = await bcrypt.compare(password, user.password);
-    // if (!passwordsMatch) {
-    //   await logAuditEvent("USER_LOGIN_FAILED", { userId: user.id, details: { error: "Incorrect password", email } });
-    //   return { error: "Invalid email or password." };
-    // }
-
-    // Simulação de verificação de senha (NÃO USE EM PRODUÇÃO)
-    if (user.password !== password) {
-       await logAuditEvent("USER_LOGIN_FAILED", { userId: user.id, details: { error: "Incorrect password (simulated)", email } });
-       return { error: "Invalid email or password." };
+    const passwordsMatch = await bcrypt.compare(password, user.password);
+    if (!passwordsMatch) {
+      await logAuditEvent("USER_LOGIN_FAILED", { userId: user.id, details: { error: "Incorrect password", email } });
+      return { error: "Invalid email or password." };
     }
-
-    // Simular "setar" a sessão. Em um app real, você criaria um token JWT ou cookie de sessão.
-    // Para esta demo, apenas logamos e redirecionamos.
-    // A role será verificada no AppLayout com base no email simulado.
-    console.log(`Login successful for ${email}. Role: ${user.role}`);
+    
+    // Simular "setar" a sessão.
+    simulatedLoggedInUserEmail = user.email; 
+    console.log(`Login successful for ${email}. Role: ${user.role}. Session simulated.`);
     await logAuditEvent("USER_LOGIN_SUCCESS", { userId: user.id, details: { email } });
     
   } catch (error) {
     console.error("Login error:", error);
+    simulatedLoggedInUserEmail = null; // Limpar em caso de erro
     await logAuditEvent("USER_LOGIN_EXCEPTION", { details: { error: "Server error during login", email } });
     return { error: "An unexpected error occurred during login." };
   }
@@ -83,61 +81,73 @@ export async function signup(values: z.infer<typeof SignupSchema>) {
       return { error: "Email already in use." };
     }
 
-    // Em um app real, faça o hash da senha:
-    // const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
     
-    // Por enquanto, salvando senha como texto (NÃO FAÇA ISSO EM PRODUÇÃO)
     const newUser = await prisma.user.create({
       data: {
         name,
         email,
-        password: password, // Deveria ser hashedPassword
-        role: email === SIMULATED_SESSION_USER_EMAIL_FOR_RBAC ? 'ADMIN' : 'USER', // Atribui ADMIN se for o email simulado
+        password: hashedPassword,
+        role: email === SIMULATED_SESSION_USER_EMAIL_FOR_RBAC ? 'ADMIN' : 'USER',
       },
     });
 
     await logAuditEvent("USER_SIGNUP_SUCCESS", { userId: newUser.id, details: { email } });
-    console.log(`Simulating signup for: Name: ${name}, Email: ${email}. Assigned role: ${newUser.role}`);
+    console.log(`Signup for: Name: ${name}, Email: ${email}. Assigned role: ${newUser.role}`);
+    
+    // Simular login após signup bem-sucedido
+    simulatedLoggedInUserEmail = newUser.email;
     
   } catch (error) {
     console.error("Signup error:", error);
+    simulatedLoggedInUserEmail = null; // Limpar em caso de erro
     await logAuditEvent("USER_SIGNUP_EXCEPTION", { details: { error: "Server error during signup", email } });
     return { error: "An unexpected error occurred during signup." };
   }
   
-  // Após o signup, geralmente você logaria o usuário ou pediria para ele logar.
-  // Por simplicidade, vamos redirecionar para o dashboard.
   redirect('/app/dashboard');
 }
 
 export async function logout() {
-  // Em um app real, você invalidaria a sessão/cookie.
-  // Por agora, apenas simulamos.
-  // O ID do usuário não está facilmente acessível aqui sem um sistema de sessão.
-  await logAuditEvent("USER_LOGOUT_SUCCESS", { details: { message: "User logged out (simulated)"} });
-  console.log("User logged out (simulated)");
+  const user = await getSimulatedCurrentUser(); // Pega o usuário antes de "deslogar" para o log
+  const userId = user?.id !== "guest" && user?.id !== "guest-error" ? user?.id : undefined;
+  const userEmail = user?.email;
+
+  simulatedLoggedInUserEmail = null; // "Limpa" a sessão simulada
+  
+  await logAuditEvent("USER_LOGOUT_SUCCESS", { userId, details: { message: `User ${userEmail || 'unknown'} logged out (simulated)`} });
+  console.log(`User ${userEmail || 'unknown'} logged out (simulated)`);
   redirect('/login');
 }
 
-// Função auxiliar para obter o usuário atual (simulado)
-// Em um app real, isso viria de um contexto de sessão/auth
-export async function getSimulatedCurrentUser() {
-  // Para esta demo, vamos assumir que se o admin logou, ele é o usuário atual
-  // Esta é uma grande simplificação e não segura para produção.
+
+export async function getSimulatedCurrentUser(): Promise<User | null> {
+  if (!simulatedLoggedInUserEmail) {
+    // Se nenhum email simulado está "logado", tente carregar o admin padrão se ele existir,
+    // caso contrário, retorne null (ou um usuário guest se preferir um fallback)
+    try {
+      const adminUser = await prisma.user.findUnique({
+        where: { email: SIMULATED_SESSION_USER_EMAIL_FOR_RBAC },
+      });
+      // Se quisermos forçar um "auto-login" do admin para fins de desenvolvimento se ninguém estiver logado:
+      // if (adminUser) {
+      //   simulatedLoggedInUserEmail = adminUser.email;
+      //   return adminUser;
+      // }
+      return adminUser; // Retorna o admin se encontrado, ou null
+    } catch (error) {
+      console.error("Error fetching default admin user:", error);
+      return null;
+    }
+  }
+
   try {
     const user = await prisma.user.findUnique({
-      where: { email: SIMULATED_SESSION_USER_EMAIL_FOR_RBAC }, // Poderia ser qualquer email que logou.
+      where: { email: simulatedLoggedInUserEmail },
     });
-    // Se nenhum usuário logou, ou se o login falhou, user será null.
-    // Em um app real, se não houver sessão, você retornaria null ou lançaria um erro.
-    if (user) return { id: user.id, email: user.email, name: user.name, role: user.role };
-    
-    // Fallback para um usuário "genérico" se o admin não estiver no DB ou não for o foco.
-    // Isso é apenas para a UI do layout funcionar sem um login real.
-    return { id: "guest", email: "guest@example.com", name: "Guest User", role: "USER" as const };
-
+    return user; // Retorna o usuário "logado" ou null se não encontrado
   } catch (error) {
     console.error("Error fetching simulated current user:", error);
-    return { id: "guest-error", email: "guest-error@example.com", name: "Guest User (Error)", role: "USER" as const };
+    return null; // Retorna null em caso de erro
   }
 }
