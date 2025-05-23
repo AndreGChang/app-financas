@@ -1,9 +1,11 @@
+
 export type Role = "USER" | "ADMIN";
 
 export interface User {
   id: string;
   email: string;
   name?: string | null;
+  password?: string; // Adicionado, embora não seja diretamente exposto na UI
   role: Role;
   createdAt: Date;
   updatedAt: Date;
@@ -36,6 +38,12 @@ export interface Sale {
   totalProfit: number;
   saleDate: Date;
   cashierId?: string | null;
+  cashierName?: string; // Adicionado para exibir o nome do caixa
+  cashier?: { // Para incluir dados do usuário/caixa
+    id: string;
+    name?: string | null;
+    email: string;
+  } | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -52,6 +60,12 @@ export interface AuditLogEntry {
   id: string;
   action: string;
   userId?: string | null;
+  userName?: string; // Adicionado para exibir o nome do usuário do log
+  user?: { // Para incluir dados do usuário do log
+    id: string;
+    name?: string | null;
+    email: string;
+  } | null;
   details?: any | null; // Prisma usa Json, que pode ser qualquer tipo serializável
   ipAddress?: string | null;
   createdAt: Date;

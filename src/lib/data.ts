@@ -1,4 +1,4 @@
-import type { Product, Sale, DashboardMetrics, SaleItem } from "@/types";
+import type { Product, Sale, DashboardMetrics, SaleItem, AuditLogEntry } from "@/types";
 import { prisma } from './db';
 import { subDays, startOfDay, startOfWeek as dateFnsStartOfWeek } from 'date-fns';
 import { Prisma } from '@prisma/client'; // Import Prisma for raw queries
@@ -35,14 +35,20 @@ export async function getSales(): Promise<Sale[]> {
       orderBy: { saleDate: 'desc' },
       include: {
         items: true, // Include related SaleItems
+        cashier: { // Incluir dados do caixa (usuário)
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        }
       },
     });
-    // Map SaleItem structure if needed, Prisma usually handles it well.
-    // The types/index.ts Sale.items should match Prisma's SaleItem[]
     return sales.map(sale => ({
         ...sale,
-        cashierId: sale.cashierId ?? undefined, // Ensure optional fields are handled
-        items: sale.items.map(item => ({...item})) // Ensure items are correctly mapped if any transformation is needed
+        cashierId: sale.cashierId ?? undefined, 
+        cashierName: sale.cashier?.name ?? 'N/A', // Adicionar nome do caixa
+        items: sale.items.map(item => ({...item})) 
     }));
   } catch (error) {
     console.error('Prisma Error (getSales):', error);
@@ -62,14 +68,8 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     });
     const totalCash = totalCashResult._sum.totalAmount || 0;
 
-    // For SUM(cost * quantity), Prisma doesn't directly support this in `aggregate`.
-    // Option 1: Fetch all and calculate (less performant for large datasets)
-    // const allProducts = await prisma.product.findMany();
-    // const currentStockValue = allProducts.reduce((sum, p) => sum + (p.cost * p.quantity), 0);
-
-    // Option 2: Use $queryRaw for complex aggregates (more performant)
     const stockValueRawResult = await prisma.$queryRaw<[{ total: number | null }]>`
-      SELECT SUM(cost * quantity) as total FROM products
+      SELECT SUM(cost * quantity) as total FROM "Product"
     `;
     const currentStockValue = stockValueRawResult[0]?.total ?? 0;
 
@@ -101,5 +101,33 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   } catch (error) {
     console.error('Prisma Error (getDashboardMetrics):', error);
     throw new Error('Failed to fetch dashboard metrics.');
+  }
+}
+
+export async function getAuditLogs(limit: number = 50, skip: number = 0): Promise<AuditLogEntry[]> {
+  try {
+    const logs = await prisma.auditLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip: skip,
+      include: {
+        user: { // Incluir dados do usuário associado ao log
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        }
+      }
+    });
+    return logs.map(log => ({
+      ...log,
+      userId: log.userId ?? undefined,
+      userName: log.user?.name ?? (log.userId ? 'User ID: ' + log.userId.substring(0,8) + '...' : 'System'),
+      details: log.details as any, // Prisma.JsonValue can be complex
+    }));
+  } catch (error) {
+    console.error('Prisma Error (getAuditLogs):', error);
+    throw new Error('Failed to fetch audit logs.');
   }
 }

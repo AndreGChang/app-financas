@@ -15,8 +15,8 @@ import {
 } from "@/components/ui/sidebar";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
-import { Home, Package, ShoppingCart, BarChart3, LogOut, Store, Settings, ShieldCheck, Activity } from "lucide-react";
-import { logout, getSimulatedCurrentUser } from "@/lib/actions/auth"; // Importar função para pegar usuário
+import { Home, Package, ShoppingCart, LogOut, Store, Settings, ShieldCheck, Activity, History } from "lucide-react";
+import { logout, getSimulatedCurrentUser } from "@/lib/actions/auth";
 import type { User, Role } from "@/types";
 
 const navItemsBase = [
@@ -26,17 +26,15 @@ const navItemsBase = [
 ];
 
 const adminNavItems = [
-  { href: "/app/admin/audit-logs", label: "Audit Logs", icon: Activity, roles: ["ADMIN"] as Role[] }, // Exemplo de painel admin
-  // Adicionar mais links de admin aqui
+  { href: "/app/admin/audit-logs", label: "Audit Logs", icon: History, roles: ["ADMIN"] as Role[] },
+  { href: "/app/admin/settings", label: "Admin Settings", icon: ShieldCheck, roles: ["ADMIN"] as Role[] },
 ];
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const pageTitle = "MarketEase"; // Placeholder, deveria ser dinâmico
-
-  // Simular obtenção do usuário atual e sua role
-  // Em um aplicativo real, isso viria de uma sessão/contexto de autenticação
+  
   const currentUser = await getSimulatedCurrentUser();
   const userRole = currentUser?.role || "USER";
+  const pageTitle = currentUser?.name || "MarketEase";
 
   const navItems = [
     ...navItemsBase,
@@ -71,20 +69,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
-             {/* Link de Admin Panel Condicional (Exemplo mais direto) */}
-             {userRole === 'ADMIN' && (
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  tooltip={{ children: "Admin Settings", className: "group-data-[collapsible=icon]:block hidden" }}
-                >
-                  <Link href="/app/admin/settings">
-                    <ShieldCheck />
-                    <span>Admin Settings</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            )}
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter className="p-2">
@@ -101,7 +85,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <AppHeader pageTitle={pageTitle} />
+        <AppHeader pageTitle={pageTitle} currentUser={currentUser} />
         <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-auto">
           {children}
         </main>
