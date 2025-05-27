@@ -10,7 +10,7 @@ export async function getProducts(): Promise<Product[]> {
     const products = await prisma.product.findMany({
       orderBy: { name: 'asc' },
     });
-    return products; // Prisma handles type mapping (Float/Decimal to number, DateTime to Date)
+    return products;
   } catch (error) {
     console.error('Prisma Error (getProducts):', error);
     throw new Error('Failed to fetch products.');
@@ -31,11 +31,11 @@ export async function getProductById(id: string): Promise<Product | null> {
 
 export async function getSales(): Promise<Sale[]> {
   try {
-    const sales = await prisma.sale.findMany({
+    const salesFromPrisma = await prisma.sale.findMany({
       orderBy: { saleDate: 'desc' },
       include: {
         items: true, // Include related SaleItems
-        cashier: { // Incluir dados do caixa (usuário)
+        cashier: { // Include data from the related User (cashier)
           select: {
             id: true,
             name: true,
@@ -44,11 +44,22 @@ export async function getSales(): Promise<Sale[]> {
         }
       },
     });
-    return sales.map(sale => ({
-        ...sale,
-        cashierId: sale.cashierId ?? undefined, 
-        cashierName: sale.cashier?.name ?? 'N/A', // Adicionar nome do caixa
-        items: sale.items.map(item => ({...item})) 
+
+    // Map to the Sale type defined in src/types/index.ts
+    return salesFromPrisma.map(sale => ({
+      id: sale.id,
+      items: sale.items.map(item => ({ ...item })), // Assuming SaleItem structure matches
+      totalAmount: sale.totalAmount,
+      totalProfit: sale.totalProfit,
+      saleDate: sale.saleDate,
+      cashierId: sale.cashierId, // This is nullable String? from Prisma schema
+      cashier: sale.cashier ? { // This will be populated if include is successful
+        id: sale.cashier.id,
+        name: sale.cashier.name, // name is nullable (String?) in User model
+        email: sale.cashier.email,
+      } : null,
+      createdAt: sale.createdAt,
+      updatedAt: sale.updatedAt,
     }));
   } catch (error) {
     console.error('Prisma Error (getSales):', error);
@@ -85,7 +96,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       where: { saleDate: { gte: sow } },
     });
     const weeklyProfit = weeklyProfitResult._sum.totalProfit || 0;
-    
+
     const lowStockItems = await prisma.product.findMany({
       where: { quantity: { lt: 50 } },
       orderBy: { quantity: 'asc' },

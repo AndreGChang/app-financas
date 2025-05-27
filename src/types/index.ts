@@ -1,11 +1,12 @@
 
+
 export type Role = "USER" | "ADMIN";
 
 export interface User {
   id: string;
   email: string;
   name?: string | null;
-  password?: string; 
+  password?: string;
   role: Role;
   createdAt: Date;
   updatedAt: Date;
@@ -37,11 +38,10 @@ export interface Sale {
   totalAmount: number; // Stored in USD
   totalProfit: number; // Stored in USD
   saleDate: Date;
-  cashierId?: string | null;
-  cashierName?: string; 
-  cashier?: { 
+  cashierId?: string | null; // Foreign key
+  cashier?: { // Populated by Prisma include
     id: string;
-    name?: string | null;
+    name: string | null;
     email: string;
   } | null;
   createdAt: Date;
@@ -60,13 +60,13 @@ export interface AuditLogEntry {
   id: string;
   action: string;
   userId?: string | null;
-  userName?: string; 
-  user?: { 
+  userName?: string;
+  user?: {
     id: string;
     name?: string | null;
     email: string;
   } | null;
-  details?: any | null; 
+  details?: any | null;
   ipAddress?: string | null;
   createdAt: Date;
 }
@@ -77,9 +77,9 @@ export type ExchangeRates = Record<string, number>;
 
 // Type for AwesomeAPI response item
 export interface AwesomeAPICurrencyInfo {
-  code: string;
-  codein: string;
-  name: string;
+  code: string; // e.g., "USD"
+  codein: string; // e.g., "BRL"
+  name: string; // e.g., "Dólar Americano/Real Brasileiro"
   high: string;
   low: string;
   varBid: string;
@@ -90,5 +90,5 @@ export interface AwesomeAPICurrencyInfo {
   create_date: string;
 }
 
-// Type for AwesomeAPI full response
+// Type for AwesomeAPI full response, which is a dictionary where keys are like "USDBRL"
 export type AwesomeAPIResponse = Record<string, AwesomeAPICurrencyInfo>;
