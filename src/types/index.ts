@@ -5,7 +5,7 @@ export interface User {
   id: string;
   email: string;
   name?: string | null;
-  password?: string; // Adicionado, embora não seja diretamente exposto na UI
+  password?: string; 
   role: Role;
   createdAt: Date;
   updatedAt: Date;
@@ -14,8 +14,8 @@ export interface User {
 export interface Product {
   id: string;
   name: string;
-  price: number;
-  cost: number;
+  price: number; // Stored in USD
+  cost: number;  // Stored in USD
   quantity: number;
   createdAt: Date;
   updatedAt: Date;
@@ -27,19 +27,19 @@ export interface SaleItem {
   productId: string;
   productName: string;
   quantity: number;
-  priceAtSale: number;
-  costAtSale: number;
+  priceAtSale: number; // Stored in USD
+  costAtSale: number;  // Stored in USD
 }
 
 export interface Sale {
   id: string;
   items: SaleItem[];
-  totalAmount: number;
-  totalProfit: number;
+  totalAmount: number; // Stored in USD
+  totalProfit: number; // Stored in USD
   saleDate: Date;
   cashierId?: string | null;
-  cashierName?: string; // Adicionado para exibir o nome do caixa
-  cashier?: { // Para incluir dados do usuário/caixa
+  cashierName?: string; 
+  cashier?: { 
     id: string;
     name?: string | null;
     email: string;
@@ -60,13 +60,35 @@ export interface AuditLogEntry {
   id: string;
   action: string;
   userId?: string | null;
-  userName?: string; // Adicionado para exibir o nome do usuário do log
-  user?: { // Para incluir dados do usuário do log
+  userName?: string; 
+  user?: { 
     id: string;
     name?: string | null;
     email: string;
   } | null;
-  details?: any | null; // Prisma usa Json, que pode ser qualquer tipo serializável
+  details?: any | null; 
   ipAddress?: string | null;
   createdAt: Date;
 }
+
+// Type for exchange rates, e.g., { "BRL": 5.05, "EUR": 0.92 }
+// These rates are relative to USD (USD is 1.0)
+export type ExchangeRates = Record<string, number>;
+
+// Type for AwesomeAPI response item
+export interface AwesomeAPICurrencyInfo {
+  code: string;
+  codein: string;
+  name: string;
+  high: string;
+  low: string;
+  varBid: string;
+  pctChange: string;
+  bid: string; // We'll use this one for the rate
+  ask: string;
+  timestamp: string;
+  create_date: string;
+}
+
+// Type for AwesomeAPI full response
+export type AwesomeAPIResponse = Record<string, AwesomeAPICurrencyInfo>;

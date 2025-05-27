@@ -1,8 +1,9 @@
+
 "use client";
 
 import type React from 'react';
-import { useState, useTransition, useCallback } from 'react';
-import type { Product } from '@/types';
+import { useState, useTransition, useCallback, useEffect } from 'react';
+import type { Product, ExchangeRates } from '@/types';
 import { deleteProduct } from '@/lib/actions/products';
 import { useToast } from '@/hooks/use-toast';
 
@@ -21,32 +22,49 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ProductDialog } from './ProductDialog';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, Edit, Trash2, PackageSearch } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, PackageSearch, Globe } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface ProductsClientProps {
   initialProducts: Product[];
+  exchangeRates: ExchangeRates;
+  supportedCurrencies: string[];
+  initialCurrency: string;
 }
 
-export function ProductsClient({ initialProducts }: ProductsClientProps) {
+export function ProductsClient({ 
+  initialProducts, 
+  exchangeRates,
+  supportedCurrencies,
+  initialCurrency 
+}: ProductsClientProps) {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [searchTerm, setSearchTerm] = useState("");
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState<string>(initialCurrency);
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
+  useEffect(() => {
+    // Update products if initialProducts changes (e.g. after add/edit)
+    // This might not be strictly necessary if revalidatePath works perfectly,
+    // but can help ensure client-side state is in sync.
+    setProducts(initialProducts);
+  }, [initialProducts]);
 
-  const refreshProducts = useCallback(async () => {
-    // In a real app, you'd fetch from an API. Here, we might need to re-prop or use a different state management.
-    // For now, actions will revalidate and Next.js should re-render.
-    // This function is a placeholder if client-side refresh is needed without full page reload.
-    // For this example, we'll rely on revalidatePath from server actions.
-    // To ensure UI updates after add/edit, we can clear editingProduct/showAddDialog
-    // and the ProductDialog's onSuccess can trigger a parent-level state update if needed.
-    // For simplicity with server actions, we'll assume revalidation works.
-  }, []);
-
+  const refreshProductsList = async () => {
+    // For now, rely on Next.js revalidation via server actions.
+    // If client-side fetching is needed, implement here.
+    // e.g. const updatedProducts = await fetch('/api/products').then(res => res.json());
+    // setProducts(updatedProducts);
+    console.log("Product list refresh triggered by dialog success.");
+  };
+  
+  const handleDialogSuccess = () => {
+    // The server action should revalidate the path, causing `initialProducts` to update.
+    // The useEffect above will then update the local `products` state.
+    refreshProductsList();
+  };
 
   const handleDelete = (productId: string) => {
     startTransition(async () => {
@@ -55,28 +73,36 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
         toast({ variant: "destructive", title: "Deletion Failed", description: result.error });
       } else {
         toast({ title: "Success", description: result.success });
-        setProducts(prev => prev.filter(p => p.id !== productId)); // Optimistic update or rely on revalidation
-        refreshProducts();
+        // Optimistic update or rely on revalidation:
+        // setProducts(prev => prev.filter(p => p.id !== productId)); 
+        // Server action revalidation should handle the list update.
       }
     });
   };
   
-  const handleDialogSuccess = () => {
-    setEditingProduct(null);
-    setShowAddDialog(false);
-    // Server action revalidation should update the list.
-    // If not, implement a client-side fetch here.
-    // For now, we expect Next.js to handle it.
-  };
-
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     product.id.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
-  const formatCurrency = (amount: number | undefined) => {
-    if (amount === undefined) return 'N/A';
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  const formatCurrency = (amountUSD: number | undefined) => {
+    if (amountUSD === undefined) return 'N/A';
+    
+    const rate = exchangeRates[selectedCurrency] || 1.0; // Default to 1.0 if rate not found
+    const convertedAmount = amountUSD * rate;
+
+    try {
+      return new Intl.NumberFormat('en-US', { 
+        style: 'currency', 
+        currency: selectedCurrency,
+        // Attempt to provide sensible fraction digits based on currency
+        minimumFractionDigits: selectedCurrency === "USD" || selectedCurrency === "EUR" || selectedCurrency === "BRL" ? 2 : 2,
+        maximumFractionDigits: selectedCurrency === "USD" || selectedCurrency === "EUR" || selectedCurrency === "BRL" ? 2 : 4,
+      }).format(convertedAmount);
+    } catch (e) {
+      // Fallback for unsupported currency codes in Intl.NumberFormat
+      return `${selectedCurrency} ${convertedAmount.toFixed(2)}`;
+    }
   };
 
   return (
@@ -88,36 +114,39 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="max-w-sm"
         />
-        <ProductDialog onSuccess={handleDialogSuccess}>
-          <Button>
-            <PlusCircle className="mr-2 h-4 w-4" /> Add Product
-          </Button>
-        </ProductDialog>
+        <div className="flex items-center gap-x-4">
+          <div className="flex items-center gap-2">
+            <Globe className="h-5 w-5 text-muted-foreground" />
+            <Select value={selectedCurrency} onValueChange={setSelectedCurrency}>
+              <SelectTrigger className="w-[100px]">
+                <SelectValue placeholder="Currency" />
+              </SelectTrigger>
+              <SelectContent>
+                {supportedCurrencies.map(currency => (
+                  <SelectItem key={currency} value={currency}>{currency}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <ProductDialog onSuccess={handleDialogSuccess}>
+            <Button>
+              <PlusCircle className="mr-2 h-4 w-4" /> Add Product
+            </Button>
+          </ProductDialog>
+        </div>
       </div>
-
-      {editingProduct && (
-        <ProductDialog product={editingProduct} onSuccess={handleDialogSuccess}>
-          {/* This is a placeholder trigger, actual trigger is row button. Dialog opens via state. */}
-          {/* This structure for dialogs is tricky. It might be better to manage dialog open state directly. */}
-          {/* For simplicity: the row edit button will set `editingProduct` and then this dialog will use it. */}
-          {/* This is not ideal; dialog should be self-contained or controlled by parent state effectively. */}
-          {/* Let's assume this dialog is opened by setting editingProduct, then its open state managed internally */}
-          {/* We need to ensure the dialog is actually mounted and can open when editingProduct changes. */}
-          {/* A better way: <ProductDialog isOpen={!!editingProduct} onOpenChange={(open) => !open && setEditingProduct(null)} product={editingProduct} ... /> */}
-          {/* For now, keep it simple and rely on the trigger mechanism or a more direct state control. */}
-          <span /> 
-        </ProductDialog>
-      )}
-
 
       {filteredProducts.length > 0 ? (
         <Table>
-          <TableCaption>A list of your products.</TableCaption>
+          <TableCaption>
+            A list of your products. Prices are shown in {selectedCurrency}. 
+            Original prices are stored in USD.
+          </TableCaption>
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead className="text-right">Price</TableHead>
-              <TableHead className="text-right">Cost</TableHead>
+              <TableHead className="text-right">Price ({selectedCurrency})</TableHead>
+              <TableHead className="text-right">Cost ({selectedCurrency})</TableHead>
               <TableHead className="text-right">Quantity</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -183,6 +212,9 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
             )}
         </div>
       )}
+       <p className="text-xs text-muted-foreground mt-4">
+          * Currency conversion is for display purposes. Rates are fetched from AwesomeAPI and may be cached for up to an hour. All transactions are processed in USD.
+        </p>
     </div>
   );
 }
