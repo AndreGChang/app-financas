@@ -19,26 +19,36 @@ export const metadata: Metadata = {
 
 // Função para renderizar detalhes JSON de forma legível
 const renderDetails = (details: any) => {
-  if (!details) return <span className="text-muted-foreground">N/A</span>;
-  if (typeof details === 'string') return details;
+  if (details === null || details === undefined) return <span className="text-muted-foreground">N/A</span>;
+  if (typeof details === 'string') {
+    if (details === '(Failed to decrypt)') {
+      return <span className="text-destructive font-semibold">{details}</span>;
+    }
+    if (details.startsWith('ENCRYPTION_FAILED:')) {
+       return <span className="text-destructive font-semibold">Encryption Failed: <pre className="whitespace-pre-wrap text-xs bg-destructive/10 p-1 rounded-sm inline">{details.substring('ENCRYPTION_FAILED:'.length)}</pre></span>;
+    }
+    // If it's a simple string (not JSON parsable after decryption, or was plain text)
+    return <pre className="whitespace-pre-wrap text-xs bg-muted p-1 rounded-sm">{details}</pre>;
+  }
   try {
     // Tenta formatar como JSON, mas limita a profundidade para evitar sobrecarga
     const jsonString = JSON.stringify(details, (key, value) => {
       if (typeof value === 'object' && value !== null) {
         // Limita o número de chaves para objetos grandes
-        if (Object.keys(value).length > 5) {
+        if (Object.keys(value).length > 10) { // Increased limit slightly
           return '[Object too large to display fully]';
         }
       }
       return value;
     }, 2);
     
-    if (jsonString.length > 300) { // Limita o comprimento total da string
-        return <pre className="whitespace-pre-wrap text-xs bg-muted p-1 rounded-sm">{jsonString.substring(0, 300)}...</pre>;
+    if (jsonString.length > 500) { // Limita o comprimento total da string
+        return <pre className="whitespace-pre-wrap text-xs bg-muted p-1 rounded-sm">{jsonString.substring(0, 500)}...</pre>;
     }
     return <pre className="whitespace-pre-wrap text-xs bg-muted p-1 rounded-sm">{jsonString}</pre>;
   } catch (e) {
-    return <span className="text-destructive">Error displaying details</span>;
+    // Should not happen if details is already an object, but as a fallback
+    return <span className="text-destructive">Error displaying details object</span>;
   }
 };
 
@@ -47,13 +57,11 @@ export default async function AuditLogsPage() {
   const currentUser = await getSimulatedCurrentUser();
 
   if (currentUser?.role !== 'ADMIN') {
-    // Redireciona para o dashboard se o usuário não for admin
-    // Em um app real, isso seria melhor tratado por middleware
     console.warn(`User ${currentUser?.email} tried to access admin audit logs without ADMIN role.`);
     redirect('/app/dashboard'); 
   }
 
-  const auditLogs = await getAuditLogs(100); // Pega os últimos 100 logs, por exemplo
+  const auditLogs = await getAuditLogs(100); 
 
   return (
     <Card className="shadow-xl">
@@ -62,7 +70,7 @@ export default async function AuditLogsPage() {
           <History className="h-6 w-6 text-primary" />
           <div>
             <CardTitle className="text-2xl font-semibold text-foreground">Audit Logs</CardTitle>
-            <CardDescription>Track important system events and user actions.</CardDescription>
+            <CardDescription>Track important system events and user actions. Details are encrypted at rest.</CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -85,7 +93,7 @@ export default async function AuditLogsPage() {
                   <TableRow key={log.id}>
                     <TableCell>{format(new Date(log.createdAt), "yyyy-MM-dd HH:mm:ss")}</TableCell>
                     <TableCell>
-                      <Badge variant={log.action.includes("FAILED") || log.action.includes("EXCEPTION") ? "destructive" : "secondary"}>
+                      <Badge variant={log.action.includes("FAILED") || log.action.includes("EXCEPTION") || log.action.includes("ERROR") ? "destructive" : "secondary"}>
                         {log.action}
                       </Badge>
                     </TableCell>
@@ -110,7 +118,3 @@ export default async function AuditLogsPage() {
     </Card>
   );
 }
-
-// Criar diretório se não existir
-// mkdir -p src/app/app/admin/audit-logs
-// touch src/app/app/admin/audit-logs/page.tsx

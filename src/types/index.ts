@@ -1,12 +1,11 @@
 
-
 export type Role = "USER" | "ADMIN";
 
 export interface User {
   id: string;
   email: string;
   name?: string | null;
-  password?: string;
+  password?: string; // Should be the hash in DB, not exposed to client beyond auth forms
   role: Role;
   createdAt: Date;
   updatedAt: Date;
@@ -25,11 +24,14 @@ export interface Product {
 export interface SaleItem {
   id: string;
   saleId: string;
+  // sale?: Sale; // Optional: if you need to navigate back from item to sale
   productId: string;
-  productName: string;
+  // product?: Product; // Optional: if you need full product details here
+  productName: string; // Denormalized for convenience
   quantity: number;
-  priceAtSale: number; // Stored in USD
-  costAtSale: number;  // Stored in USD
+  priceAtSale: number; // Stored in USD (price per unit at the time of sale)
+  costAtSale: number;  // Stored in USD (cost per unit at the time of sale)
+  // createdAt and updatedAt can be added if needed for SaleItem itself
 }
 
 export interface Sale {
@@ -59,14 +61,14 @@ export interface DashboardMetrics {
 export interface AuditLogEntry {
   id: string;
   action: string;
-  userId?: string | null;
-  userName?: string;
-  user?: {
+  userId?: string | null; // Changed from string to string | null
+  userName?: string; // Added for display convenience
+  user?: { // Populated by Prisma include
     id: string;
     name?: string | null;
     email: string;
   } | null;
-  details?: any | null;
+  details?: any | null; // Can be string (encrypted), object (decrypted), or null
   ipAddress?: string | null;
   createdAt: Date;
 }

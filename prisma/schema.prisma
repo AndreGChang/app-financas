@@ -14,36 +14,36 @@ enum Role {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
+  id        String     @id @default(uuid())
+  email     String     @unique
   name      String?
-  password  String   // Em um app real, isso seria um hash
-  role      Role     @default(USER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  auditLogs AuditLog[] // Relação com AuditLog
+  password  String // Password hash
+  role      Role       @default(USER)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  sales     Sale[]     @relation("CashierSales")
+  auditLogs AuditLog[] @relation("UserAuditLogs")
 }
 
 model Product {
-  id        String   @id @default(uuid())
+  id        String     @id @default(uuid())
   name      String
-  price     Float
-  cost      Float
+  price     Float // Stored in USD
+  cost      Float // Stored in USD
   quantity  Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  saleItems SaleItem[] // Relação com SaleItem
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  saleItems SaleItem[]
 }
 
 model Sale {
   id          String     @id @default(uuid())
-  totalAmount Float
-  totalProfit Float
-  saleDate    DateTime   @default(now())
-  cashierId   String? // Pode ser uma FK para User no futuro
   items       SaleItem[]
+  totalAmount Float // Stored in USD
+  totalProfit Float // Stored in USD
+  saleDate    DateTime   @default(now())
+  cashierId   String?
+  cashier     User?      @relation("CashierSales", fields: [cashierId], references: [id])
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 }
@@ -54,26 +54,20 @@ model SaleItem {
   sale         Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
   productId    String
   product      Product @relation(fields: [productId], references: [id], onDelete: Restrict)
-  productName  String // Denormalized
+  productName  String // Denormalized for convenience
   quantity     Int
-  priceAtSale  Float
-  costAtSale   Float
+  priceAtSale  Float // Stored in USD (price per unit at the time of sale)
+  costAtSale   Float // Stored in USD (cost per unit at the time of sale)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-
-  @@index([saleId])
-  @@index([productId])
 }
 
 model AuditLog {
-  id        String    @id @default(uuid())
-  action    String    // Ex: "CREATE_PRODUCT", "LOGIN_SUCCESS"
-  userId    String?   // ID do usuário que realizou a ação
-  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  details   Json?     // Detalhes adicionais da ação em formato JSON
+  id        String   @id @default(uuid())
+  action    String
+  userId    String?
+  user      User?    @relation("UserAuditLogs", fields: [userId], references: [id])
+  details   String?  // Encrypted JSON string
   ipAddress String?
-  createdAt DateTime  @default(now())
-
-  @@index([userId])
-  @@index([action])
+  createdAt DateTime @default(now())
 }
