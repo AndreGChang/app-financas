@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { History, AlertTriangle } from "lucide-react";
+import { History, AlertTriangle, FileJson, Info } from "lucide-react";
 import { format } from 'date-fns';
 import type { Metadata } from 'next';
 import type { AuditLogEntry } from "@/types";
@@ -19,36 +19,60 @@ export const metadata: Metadata = {
 
 // Função para renderizar detalhes JSON de forma legível
 const renderDetails = (details: any) => {
-  if (details === null || details === undefined) return <span className="text-muted-foreground">N/A</span>;
+  if (details === null || details === undefined) {
+    return (
+      <span className="text-muted-foreground italic flex items-center gap-1 text-xs">
+        <Info size={14} /> [No details recorded for this event]
+      </span>
+    );
+  }
+
   if (typeof details === 'string') {
+    if (details.trim() === '') {
+      return (
+        <span className="text-muted-foreground italic flex items-center gap-1 text-xs">
+          <Info size={14} /> [Details logged as empty string]
+        </span>
+      );
+    }
     if (details === '(Failed to decrypt)') {
       return <span className="text-destructive font-semibold">{details}</span>;
     }
     if (details.startsWith('ENCRYPTION_FAILED:')) {
        return <span className="text-destructive font-semibold">Encryption Failed: <pre className="whitespace-pre-wrap text-xs bg-destructive/10 p-1 rounded-sm inline">{details.substring('ENCRYPTION_FAILED:'.length)}</pre></span>;
     }
-    // If it's a simple string (not JSON parsable after decryption, or was plain text)
+    // Se for uma string simples (não JSON analisável após decriptografia, ou era texto plano)
     return <pre className="whitespace-pre-wrap text-xs bg-muted p-1 rounded-sm">{details}</pre>;
   }
+
   try {
     // Tenta formatar como JSON, mas limita a profundidade para evitar sobrecarga
     const jsonString = JSON.stringify(details, (key, value) => {
       if (typeof value === 'object' && value !== null) {
         // Limita o número de chaves para objetos grandes
-        if (Object.keys(value).length > 10) { // Increased limit slightly
+        if (Object.keys(value).length > 15) { 
           return '[Object too large to display fully]';
         }
       }
       return value;
     }, 2);
     
-    if (jsonString.length > 500) { // Limita o comprimento total da string
-        return <pre className="whitespace-pre-wrap text-xs bg-muted p-1 rounded-sm">{jsonString.substring(0, 500)}...</pre>;
+    // Verifica se o objeto original era realmente vazio
+    if (jsonString.trim() === '{}' || jsonString.trim() === '[]') {
+      return (
+        <span className="text-muted-foreground italic flex items-center gap-1 text-xs">
+          <FileJson size={14} /> [Empty details {jsonString.trim() === '{}' ? 'object' : 'array'} logged]
+        </span>
+      );
+    }
+
+    if (jsonString.length > 700) { // Limita o comprimento total da string
+        return <pre className="whitespace-pre-wrap text-xs bg-muted p-1 rounded-sm">{jsonString.substring(0, 700)}...</pre>;
     }
     return <pre className="whitespace-pre-wrap text-xs bg-muted p-1 rounded-sm">{jsonString}</pre>;
   } catch (e) {
-    // Should not happen if details is already an object, but as a fallback
-    return <span className="text-destructive">Error displaying details object</span>;
+    // Não deve acontecer se 'details' já for um objeto, mas como fallback
+    return <span className="text-destructive">Error displaying details object: {(e as Error).message}</span>;
   }
 };
 
@@ -78,7 +102,7 @@ export default async function AuditLogsPage() {
         {auditLogs.length > 0 ? (
           <div className="overflow-x-auto">
             <Table>
-              <TableCaption>A list of recent audit log entries.</TableCaption>
+              <TableCaption>A list of recent audit log entries. Encrypted details are decrypted for display if keys are configured.</TableCaption>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[180px]">Timestamp</TableHead>
@@ -101,7 +125,7 @@ export default async function AuditLogsPage() {
                       {log.userName || 'System/Unknown'}
                       {log.user?.email && <div className="text-xs text-muted-foreground">{log.user.email}</div>}
                     </TableCell>
-                    <TableCell className="max-w-md">{renderDetails(log.details)}</TableCell>
+                    <TableCell className="max-w-md text-xs">{renderDetails(log.details)}</TableCell>
                     <TableCell>{log.ipAddress || <span className="text-muted-foreground">N/A</span>}</TableCell>
                   </TableRow>
                 ))}
